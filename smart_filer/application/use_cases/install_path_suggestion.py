@@ -74,6 +74,7 @@ class SuggestInstallPathUseCase:
         llm_request = LLMInstallPathRequest(
             software_name=normalized_name,
             rule_summary=_build_rule_summary(parsed_rules),
+            category_profiles=parsed_rules.category_profiles,
             aliases=aliases or [],
             context=context,
         )
@@ -163,4 +164,3 @@ def _deduplicate_preserve_order(items: list[str]) -> list[str]:
         seen.add(item)
         unique_items.append(item)
     return unique_items
-

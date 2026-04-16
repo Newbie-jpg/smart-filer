@@ -459,3 +459,147 @@
 - 规则系统已完成到 `文档结构.rule.md` 的解析迁移
 - 当前实现不再依赖 `文件结构.md` 的自然语言规则提取
 - 第二次迭代目标已完成，可继续推进后续里程碑
+
+## 2026-04-16（第三次迭代：LLM 仅分类，路径本地规则驱动）
+
+### 本次目标
+
+- 将建议链路收敛为“AI 只做分类器，路径完全由本地规则映射驱动”
+- 消除对 LLM 返回 `suggested_path` 的业务依赖，降低不同模型与不同机器环境下的路径波动
+
+### 本次代码改造
+
+1. **LLM 响应服务策略收敛**
+- 文件：`smart_filer/application/services/llm_response_service.py`
+- 调整：
+  - 删除 `unknown + suggested_path` 的路径反推类别逻辑
+  - 删除基于 LLM 路径的非法路径校验与类别-路径冲突校验分支
+  - LLM 返回合法类别且置信度达标时，统一使用本地类别映射生成安装路径
+  - 保留回退条件：LLM 调用失败、结构化错误、低置信度、unknown 类别
+
+2. **步骤12测试同步**
+- 文件：`tests/test_step12_llm_response_service.py`
+- 调整：
+  - `S:` 路径场景改为“忽略 LLM 路径并使用本地映射路径”
+  - `unknown + mapped path` 场景改为直接回退（不再反推类别）
+  - 更新规则依据断言，改为“install path selected from local category mapping”
+
+### 验证结果
+
+- 执行命令：
+  - `uv run pytest -s tests/test_step12_llm_response_service.py tests/test_step16_cli_suggest_install_path_command.py tests/test_step17_integration_cli_pipeline.py`
+- 结果：`16 passed`
+
+### 当前结论
+
+- 当前建议链路已落地“LLM 仅分类，路径本地规则驱动”
+- 在不同电脑路径规则不同的情况下，可通过本地规则文档完成路径迁移，无需依赖模型路径输出
+
+## 2026-04-16（第四次迭代：类别语义结构化透传）
+
+### 本次目标
+
+- 让模型不只看 prompt 文案，也直接看到每个 category 的 `definition/includes/excludes`
+- 恢复 system prompt 的单一职责，只保留角色定义和输出约束
+
+### 本次代码改造
+
+1. **规则中间模型增强**
+- 文件：`smart_filer/domain/models/parsed_rules.py`
+- 调整：
+  - 新增 `CategoryRuleProfile`
+  - `ParsedInstallRules` 新增 `category_profiles`
+
+2. **LLM 请求模型增强**
+- 文件：`smart_filer/domain/models/llm_models.py`
+- 调整：
+  - `LLMInstallPathRequest` 新增 `category_profiles`
+  - 支持将类别定义以结构化方式传给 prompt builder
+
+3. **规则解析器增强**
+- 文件：`smart_filer/infrastructure/rules/document_parser.py`
+- 调整：
+  - 解析 `categories[].definition`
+  - 解析 `categories[].includes`
+  - 解析 `categories[].excludes`
+  - 将结果写入 `ParsedInstallRules.category_profiles`
+
+4. **用例与提示词链路调整**
+- 文件：
+  - `smart_filer/application/use_cases/install_path_suggestion.py`
+  - `smart_filer/infrastructure/providers/prompt_builder.py`
+- 调整：
+  - 用例构建请求时同步注入 `category_profiles`
+  - user prompt 新增 `Category Reference` 段落
+  - system prompt 删除业务分类指导语，仅保留身份和 JSON 输出约束
+
+### 新增/更新测试
+
+- `tests/test_step7_rule_document_parser.py`
+  - 新增类别语义解析断言
+- `tests/test_step11_prompt_builder.py`
+  - 新增 `Category Reference` 输出断言
+  - 新增类别 profile 展示断言
+- `tests/test_step12_llm_response_service.py`
+  - 同步更新夹具，覆盖扩展后的 `ParsedInstallRules`
+- `tests/test_step13_install_path_suggestion_use_case.py`
+  - 新增 `category_profiles` 透传断言
+
+### 验证结果
+
+- 执行命令：
+  - `uv run pytest -s tests/test_step7_rule_document_parser.py`
+  - `uv run pytest -s tests/test_step11_prompt_builder.py`
+  - `uv run pytest -s tests/test_step13_install_path_suggestion_use_case.py tests/test_step12_llm_response_service.py`
+- 结果：
+  - 解析器：`4 passed`
+  - prompt builder：`3 passed`
+  - 用例 + 响应服务：`14 passed`
+
+## 2026-04-16（第五次迭代：多模型返回兼容增强）
+
+### 本次目标
+
+- 解决不同模型在 SiliconFlow 下出现的超时、字段缺失、代码块 JSON、Windows 路径非法转义等兼容问题
+
+### 本次代码改造
+
+1. **LLM 响应字段别名兼容**
+- 文件：`smart_filer/domain/models/llm_models.py`
+- 调整：
+  - 在 `LLMInstallPathResponse` 中增加常见别名键归一化
+  - 兼容 `software_category`、`classification`、`category_name`
+  - 兼容 `install_path`、`recommended_path`、`final_path`、`path`
+
+2. **提示词输出 schema 强化**
+- 文件：`smart_filer/infrastructure/providers/prompt_builder.py`
+- 调整：
+  - 在 user prompt 中补充固定 JSON 键名示例
+  - 降低模型漏掉 `category` 字段的概率
+
+3. **Provider 解析与重试增强**
+- 文件：`smart_filer/infrastructure/providers/siliconflow_adapter.py`
+- 调整：
+  - 超时自动重试一次
+  - 支持解析 Markdown 代码块中的 JSON
+  - 支持拼接分段 `message.content`
+  - 支持修复 Windows 路径单反斜杠导致的非法 JSON 转义
+
+### 新增/更新测试
+
+- `tests/test_step9_llm_models.py`
+  - 新增常见别名键兼容测试
+- `tests/test_step10_siliconflow_adapter.py`
+  - 新增代码块 JSON 兼容测试
+  - 新增超时后重试测试
+
+### 验证结果
+
+- 执行命令：
+  - `uv run pytest -s tests/test_step9_llm_models.py`
+  - `uv run pytest -s tests/test_step10_siliconflow_adapter.py`
+  - `uv run pytest -s tests/test_step11_prompt_builder.py`
+- 结果：
+  - `tests/test_step9_llm_models.py`: `7 passed`
+  - `tests/test_step10_siliconflow_adapter.py`: `8 passed`
+  - `tests/test_step11_prompt_builder.py`: `3 passed`

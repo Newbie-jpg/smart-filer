@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import re
 from typing import Any
 
 from openai import APITimeoutError, OpenAI
@@ -96,22 +97,31 @@ class SiliconFlowAdapter:
     ) -> SiliconFlowAdapterResult:
         messages = self._prompt_builder.build_messages(request)
 
-        try:
-            completion = self._client.chat.completions.create(
-                model=self._model_id,
-                messages=messages,
-                temperature=0.0,
-                response_format={"type": "json_object"},
-                timeout=self._timeout_seconds,
-            )
-        except (APITimeoutError, TimeoutError) as error:
+        last_timeout_error: Exception | None = None
+        completion: Any | None = None
+        for _attempt in range(2):
+            try:
+                completion = self._client.chat.completions.create(
+                    model=self._model_id,
+                    messages=messages,
+                    temperature=0.0,
+                    response_format={"type": "json_object"},
+                    timeout=self._timeout_seconds,
+                )
+                break
+            except (APITimeoutError, TimeoutError) as error:
+                last_timeout_error = error
+                continue
+            except Exception as error:
+                raise SiliconFlowAdapterError(
+                    "SiliconFlow request failed before receiving a valid response."
+                ) from error
+
+        if completion is None:
+            assert last_timeout_error is not None
             raise SiliconFlowTimeoutError(
                 "SiliconFlow request timed out while classifying software."
-            ) from error
-        except Exception as error:
-            raise SiliconFlowAdapterError(
-                "SiliconFlow request failed before receiving a valid response."
-            ) from error
+            ) from last_timeout_error
 
         raw_content = _extract_response_text(completion)
         parsed_response = _parse_structured_response(raw_content)
@@ -131,6 +141,8 @@ def _extract_response_text(completion: Any) -> str:
     first_choice = choices[0]
     message = getattr(first_choice, "message", None)
     content = getattr(message, "content", None) if message else None
+    if isinstance(content, list):
+        content = _flatten_content_parts(content)
     if not isinstance(content, str) or not content.strip():
         raise SiliconFlowResponseError("SiliconFlow returned empty message content.")
 
@@ -138,12 +150,22 @@ def _extract_response_text(completion: Any) -> str:
 
 
 def _parse_structured_response(raw_content: str) -> LLMInstallPathResponse:
+    normalized_content = _strip_json_code_fence(raw_content)
     try:
-        payload = json.loads(raw_content)
+        payload = json.loads(normalized_content)
     except json.JSONDecodeError as error:
-        raise SiliconFlowResponseError(
-            "SiliconFlow returned non-JSON structured content."
-        ) from error
+        repaired_content = _repair_common_json_escapes(normalized_content)
+        if repaired_content != normalized_content:
+            try:
+                payload = json.loads(repaired_content)
+            except json.JSONDecodeError:
+                raise SiliconFlowResponseError(
+                    "SiliconFlow returned non-JSON structured content."
+                ) from error
+        else:
+            raise SiliconFlowResponseError(
+                "SiliconFlow returned non-JSON structured content."
+            ) from error
 
     payload = _unwrap_structured_payload(payload)
 
@@ -168,3 +190,28 @@ def _unwrap_structured_payload(payload: object) -> object:
         if isinstance(nested, dict):
             return nested
     return payload
+
+
+def _flatten_content_parts(content: list[object]) -> str:
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if isinstance(item, dict):
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+    return "".join(parts).strip()
+
+
+def _strip_json_code_fence(raw_content: str) -> str:
+    stripped = raw_content.strip()
+    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", stripped, flags=re.DOTALL)
+    if fenced:
+        return fenced.group(1).strip()
+    return stripped
+
+
+def _repair_common_json_escapes(raw_content: str) -> str:
+    return re.sub(r"(?<!\\)\\(?![\"\\/bfnrtu])", r"\\\\", raw_content)

@@ -2,8 +2,9 @@
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from smart_filer.domain.models.parsed_rules import CategoryRuleProfile
 from smart_filer.domain.models.software_category import SoftwareCategory
 
 
@@ -14,6 +15,9 @@ class LLMInstallPathRequest(BaseModel):
 
     software_name: str = Field(min_length=1)
     rule_summary: list[str] = Field(min_length=1)
+    category_profiles: dict[SoftwareCategory, CategoryRuleProfile] = Field(
+        default_factory=dict
+    )
     aliases: list[str] = Field(default_factory=list)
     context: str | None = None
 
@@ -38,6 +42,43 @@ class LLMInstallPathResponse(BaseModel):
     suggested_install_path: str = Field(alias="suggested_path", min_length=1)
     reason: str = Field(min_length=1)
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_common_response_keys(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+
+        normalized = dict(value)
+
+        category_aliases = (
+            "software_category",
+            "classification",
+            "category_name",
+            "type",
+        )
+        path_aliases = (
+            "install_path",
+            "recommended_path",
+            "final_path",
+            "path",
+        )
+
+        if "category" not in normalized:
+            for alias in category_aliases:
+                alias_value = normalized.get(alias)
+                if alias_value is not None:
+                    normalized["category"] = alias_value
+                    break
+
+        if "suggested_path" not in normalized:
+            for alias in path_aliases:
+                alias_value = normalized.get(alias)
+                if alias_value is not None:
+                    normalized["suggested_path"] = alias_value
+                    break
+
+        return normalized
 
     @field_validator("software_category", mode="before")
     @classmethod

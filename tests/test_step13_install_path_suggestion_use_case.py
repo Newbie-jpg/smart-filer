@@ -5,6 +5,7 @@ import pytest
 from smart_filer.application.use_cases import SuggestInstallPathUseCase
 from smart_filer.config import AppSettings
 from smart_filer.domain.models import (
+    CategoryRuleProfile,
     LLMInstallPathResponse,
     ParsedInstallRules,
     SoftwareCategory,
@@ -37,6 +38,18 @@ def _parsed_rules_fixture() -> ParsedInstallRules:
             SoftwareCategory.MEDIA_DESIGN: r"D:\50_Media_Design",
             SoftwareCategory.SYSTEM_UTILITIES: r"D:\60_System_Utilities",
             SoftwareCategory.GAMES_ENTERTAIN: r"D:\70_Games_Entertain",
+        },
+        category_profiles={
+            SoftwareCategory.PRODUCTIVITY: CategoryRuleProfile(
+                definition="Communication and collaboration software.",
+                includes=["Team Chat", "Voice Collaboration"],
+                excludes=["System Maintenance"],
+            ),
+            SoftwareCategory.SYSTEM_UTILITIES: CategoryRuleProfile(
+                definition="Diagnostics and maintenance tools.",
+                includes=["System Monitor"],
+                excludes=["Team Communication"],
+            ),
         },
         warnings=[],
         rule_basis=["软件和运行环境优先放在 D 盘体系。"],
@@ -139,6 +152,10 @@ def test_use_case_handles_core_software_categories(
     assert result.needs_confirmation is True
     assert classifier.last_request is not None
     assert any("D drive" in item for item in classifier.last_request.rule_summary)
+    assert (
+        classifier.last_request.category_profiles[SoftwareCategory.PRODUCTIVITY].definition
+        == "Communication and collaboration software."
+    )
 
 
 def test_use_case_falls_back_when_software_cannot_be_reliably_classified() -> None:

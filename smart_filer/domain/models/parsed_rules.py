@@ -5,6 +5,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from smart_filer.domain.models.software_category import SoftwareCategory
 
 
+class CategoryRuleProfile(BaseModel):
+    """Structured category guidance extracted from the machine rules document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    definition: str = Field(min_length=1)
+    includes: list[str] = Field(default_factory=list)
+    excludes: list[str] = Field(default_factory=list)
+
+
 class ParsedInstallRules(BaseModel):
     """Structured install-path rules extracted from rule documents."""
 
@@ -14,6 +24,9 @@ class ParsedInstallRules(BaseModel):
     discourage_s_drive_install: bool
     fallback_install_path: str = Field(default=r"D:\10_Environments", min_length=1)
     category_install_paths: dict[SoftwareCategory, str] = Field(default_factory=dict)
+    category_profiles: dict[SoftwareCategory, CategoryRuleProfile] = Field(
+        default_factory=dict
+    )
     warnings: list[str] = Field(default_factory=list)
     rule_basis: list[str] = Field(default_factory=list)
 

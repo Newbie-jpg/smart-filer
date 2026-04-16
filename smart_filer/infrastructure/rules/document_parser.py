@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from smart_filer.domain.models.parsed_rules import ParsedInstallRules
+from smart_filer.domain.models.parsed_rules import CategoryRuleProfile, ParsedInstallRules
 from smart_filer.domain.models.software_category import SoftwareCategory
 
 
@@ -204,7 +204,9 @@ def _parse_global_rules(lines: list[str]) -> tuple[bool, bool, str, list[str]]:
     return True, True, normalized_fallback_path, rule_basis
 
 
-def _parse_categories(lines: list[str]) -> dict[SoftwareCategory, str]:
+def _parse_categories(
+    lines: list[str],
+) -> tuple[dict[SoftwareCategory, str], dict[SoftwareCategory, CategoryRuleProfile]]:
     category_blocks = _collect_blocks(
         lines,
         re.compile(r"^\s*-\s+id\s*:\s*.+$"),
@@ -213,6 +215,7 @@ def _parse_categories(lines: list[str]) -> dict[SoftwareCategory, str]:
         raise RuleDocumentParseError("categories must define at least one category.")
 
     category_paths: dict[SoftwareCategory, str] = {}
+    category_profiles: dict[SoftwareCategory, CategoryRuleProfile] = {}
 
     for block in category_blocks:
         category_raw = _extract_scalar(block, "id")
@@ -270,8 +273,14 @@ def _parse_categories(lines: list[str]) -> dict[SoftwareCategory, str]:
             )
 
         category_paths[category] = default_install_path
+        category_profiles[category] = CategoryRuleProfile(
+            definition=_extract_scalar(block, "definition")
+            or f"{category.value} software category.",
+            includes=includes,
+            excludes=excludes,
+        )
 
-    return category_paths
+    return category_paths, category_profiles
 
 
 def _validate_software_overrides(lines: list[str]) -> None:
@@ -337,7 +346,7 @@ def parse_install_rules(document_text: str) -> ParsedInstallRules:
     d_drive_preferred, discourage_s_drive_install, fallback_install_path, rule_basis = (
         _parse_global_rules(sections["global_rules"])
     )
-    category_install_paths = _parse_categories(sections["categories"])
+    category_install_paths, category_profiles = _parse_categories(sections["categories"])
     _validate_software_overrides(sections["software_overrides"])
     _validate_conflict_resolution(sections["conflict_resolution"])
     _validate_validation_examples(sections["validation_examples"])
@@ -350,6 +359,7 @@ def parse_install_rules(document_text: str) -> ParsedInstallRules:
         discourage_s_drive_install=discourage_s_drive_install,
         fallback_install_path=fallback_install_path,
         category_install_paths=category_install_paths,
+        category_profiles=category_profiles,
         warnings=[],
         rule_basis=rule_basis,
     )

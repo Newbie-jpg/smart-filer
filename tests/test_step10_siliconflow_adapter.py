@@ -209,3 +209,64 @@ def test_adapter_accepts_wrapped_json_payload_and_extra_fields() -> None:
     assert result.response.software_category.value == "development_environment"
     assert result.response.confidence == pytest.approx(0.86)
 
+
+def test_adapter_accepts_json_inside_code_fence() -> None:
+    completions = _RecordingCompletions(
+        response=_completion_with_content(
+            """```json
+            {"category":"productivity","suggested_path":"D:\\40_Productivity","reason":"Useful for finance workflows.","confidence":0.83}
+            ```"""
+        )
+    )
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    adapter = SiliconFlowAdapter(
+        api_key="test-key",
+        base_url="https://api.siliconflow.cn/v1",
+        model_id="sf-model-id",
+        timeout_seconds=5.0,
+        client=client,
+    )
+
+    result = adapter.classify_software(_request_fixture())
+
+    assert result.response.software_category.value == "productivity"
+    assert result.response.suggested_install_path == r"D:\40_Productivity"
+
+
+def test_adapter_retries_once_when_timeout_occurs() -> None:
+    completions = _RecordingCompletions(
+        response=_completion_with_content(
+            json.dumps(
+                {
+                    "category": "productivity",
+                    "suggested_path": r"D:\40_Productivity",
+                    "reason": "Recovered on retry.",
+                    "confidence": 0.8,
+                }
+            )
+        )
+    )
+    calls = {"count": 0}
+
+    def _create(**kwargs: object):
+        completions.calls.append(kwargs)
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise TimeoutError("timed out")
+        return completions._response
+
+    completions.create = _create  # type: ignore[method-assign]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    adapter = SiliconFlowAdapter(
+        api_key="test-key",
+        base_url="https://api.siliconflow.cn/v1",
+        model_id="sf-model-id",
+        timeout_seconds=5.0,
+        client=client,
+    )
+
+    result = adapter.classify_software(_request_fixture())
+
+    assert calls["count"] == 2
+    assert result.response.software_category.value == "productivity"
+

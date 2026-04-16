@@ -84,3 +84,17 @@ def test_llm_response_model_ignores_extra_keys() -> None:
 
     assert dumped["category"] == "media_design"
     assert "needs_confirmation" not in dumped
+
+
+def test_llm_response_model_accepts_common_alias_keys() -> None:
+    payload = {
+        "software_category": "productivity",
+        "install_path": r"D:\40_Productivity",
+        "reason": "Finance and market information software often belongs to productivity.",
+        "confidence": "0.81",
+    }
+
+    response = LLMInstallPathResponse.model_validate(payload)
+
+    assert response.software_category.value == "productivity"
+    assert response.suggested_install_path == r"D:\40_Productivity"

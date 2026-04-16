@@ -4,10 +4,7 @@ import pytest
 
 from smart_filer.domain.models.software_category import SoftwareCategory
 from smart_filer.infrastructure.rules.document_loader import load_rules_document
-from smart_filer.infrastructure.rules.document_parser import (
-    RuleDocumentParseError,
-    parse_install_rules,
-)
+from smart_filer.infrastructure.rules.document_parser import RuleDocumentParseError, parse_install_rules
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +49,18 @@ def test_parser_extracts_category_to_install_path_mappings_from_machine_rules_do
         rules.category_install_paths[SoftwareCategory.GAMES_ENTERTAIN]
         == r"D:\70_Games_Entertain"
     )
+
+
+def test_parser_extracts_category_profiles_from_machine_rules_doc() -> None:
+    text = load_rules_document(REPO_ROOT / "文档结构.rule.md")
+
+    rules = parse_install_rules(text)
+
+    productivity_profile = rules.category_profiles[SoftwareCategory.PRODUCTIVITY]
+
+    assert "communication" in productivity_profile.definition
+    assert "Voice Collaboration" in productivity_profile.includes
+    assert "System Maintenance" in productivity_profile.excludes
 
 
 def test_parser_raises_clear_error_when_required_section_missing() -> None:

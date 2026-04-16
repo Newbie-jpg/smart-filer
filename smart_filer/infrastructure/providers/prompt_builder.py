@@ -10,6 +10,7 @@ class InstallPathPromptBuilder:
         aliases_text = ", ".join(request.aliases) if request.aliases else "N/A"
         context_text = request.context.strip() if request.context else "N/A"
         rules_text = "\n".join(f"- {item}" for item in request.rule_summary)
+        category_reference_text = self._build_category_reference_text(request)
 
         system_prompt = (
             "You are a software installation routing assistant for Windows.\n"
@@ -30,6 +31,11 @@ class InstallPathPromptBuilder:
             f"{context_text}\n\n"
             "Rule Summary:\n"
             f"{rules_text}\n\n"
+            "Category Reference:\n"
+            f"{category_reference_text}\n\n"
+            "Return one JSON object with exactly these keys:\n"
+            '{"category":"<allowed_category>","suggested_path":"<windows_path>",'
+            '"reason":"<short_reason>","confidence":0.0}\n\n'
             "Please infer the software category and suggest an install path."
         )
 
@@ -37,3 +43,18 @@ class InstallPathPromptBuilder:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
+
+    def _build_category_reference_text(self, request: LLMInstallPathRequest) -> str:
+        if not request.category_profiles:
+            return "N/A"
+
+        lines: list[str] = []
+        for category in sorted(request.category_profiles.keys(), key=lambda item: item.value):
+            profile = request.category_profiles[category]
+            includes = ", ".join(profile.includes) if profile.includes else "N/A"
+            excludes = ", ".join(profile.excludes) if profile.excludes else "N/A"
+            lines.append(f"- {category.value}")
+            lines.append(f"  definition: {profile.definition}")
+            lines.append(f"  includes: {includes}")
+            lines.append(f"  excludes: {excludes}")
+        return "\n".join(lines)

@@ -20,7 +20,10 @@
   - 已完成步骤17集成测试（CLI -> 应用层 -> 规则系统 -> 回退逻辑主路径）。
   - 已完成步骤18文档验收清单（README 边界/配置/回退策略/未实现能力同步）。
   - 已完成 2026-04-16 当日线上调试增强：修复 SiliconFlow 在“JSON 可解析但不完全符合 schema”与“category 返回 unknown”时的稳定性问题。
+  - 已完成 2026-04-16 当日策略收敛：LLM 仅做软件类别分类，安装路径统一由本地规则文档中的类别映射决定，不再消费 LLM 返回路径。
   - 已完成机器规则设计到实现落地：解析器已按 `memory-bank/machine-rules-document-design.md` 约束进行结构化校验。
+  - 已完成 2026-04-16 当日类别语义透传：规则文档中的 `definition/includes/excludes` 已进入 LLM 请求，system prompt 仅保留身份与输出约束。
+  - 已完成 2026-04-16 当日多模型兼容增强：provider 已支持超时重试、代码块 JSON、分段内容拼接、常见字段别名以及 Windows 路径转义修复。
 
 ## 2. 分层与依赖方向
 
@@ -86,7 +89,7 @@
 - 模块：`smart_filer/domain/models/llm_models.py`
 - 对象：
   - `LLMInstallPathRequest`
-    - 字段：`software_name`、`rule_summary`、`aliases`、`context`
+    - 字段：`software_name`、`rule_summary`、`category_profiles`、`aliases`、`context`
     - 约束：`software_name` 非空、`rule_summary` 至少一条且成员不为空字符串
   - `LLMInstallPathResponse`
     - 字段：`software_category`、`suggested_install_path`、`reason`、`confidence`
@@ -126,11 +129,13 @@
   - `global_rules.forbidden_install_roots` 至少包含 `S:\`
   - `global_rules.fallback_install_path` 必须为 `D:\` 绝对路径
   - `categories` 必须落在受控枚举中，且 `default_install_path` 属于 `allowed_install_paths`
+  - `categories.definition/includes/excludes` 会被解析为结构化类别语义
   - `conflict_resolution.order` 必须匹配设计定义顺序
   - `validation_examples` 至少 10 条且字段完整
 - 输出兼容：
   - 仍产出 `ParsedInstallRules` 供应用层与硬规则服务复用
   - 新增 `fallback_install_path`，回退路径优先使用文档声明值
+  - 新增 `category_profiles`，供提示词层展示类别定义
 
 ## 5. SiliconFlow 适配器与提示词构建（步骤10-11）
 
@@ -149,9 +154,16 @@
   - 提示词增强（2026-04-16）：
     - 明确限定 `category` 允许值集合
     - 明确 `confidence` 必须为 `0~1` 数值
+    - user prompt 显式展示每个 category 的 `definition/includes/excludes`
+    - system prompt 仅负责角色定义与 JSON 输出要求
+    - user prompt 补充固定 JSON 键名示例，降低字段缺失概率
   - 解析增强（2026-04-16）：
     - 支持解包 `data/result/response` 嵌套 JSON 结构
     - schema 校验失败时返回字段级错误位置与错误原因（便于定位）
+    - 支持解析 Markdown 代码块中的 JSON
+    - 支持拼接分段 message content
+    - 支持修复常见 Windows 路径单反斜杠导致的非法 JSON 转义
+    - provider 请求超时会自动重试一次
 
 ## 6. LLM 响应解析与回退服务（步骤12）
 
@@ -160,13 +172,14 @@
   - `build_install_suggestion_from_llm`：把 provider 输出转换为 `InstallSuggestion`
 - 核心策略：
   - 若 LLM 响应合法且置信度达标，则输出正常建议并附加规则依据
-  - 当 `category = unknown` 时，先尝试根据 `suggested_path` 反推类别映射；若成功则继续正常流程，不直接回退
+  - LLM 仅用于输出 `category` 与 `confidence`，安装路径不采纳 LLM 的 `suggested_path`
+  - 当 `category` 为有效受控类别且置信度达标时，安装路径统一从本地规则映射读取
+  - 当 `category = unknown` 时直接进入不确定回退，不再根据 `suggested_path` 反推类别
   - 若出现以下任一情况，进入回退并强制人工确认：
     - provider 调用失败（如超时）
     - provider 结构化响应错误（如非法 JSON / schema 校验失败）
     - 低置信度结果
-    - 非法路径（非 `D:` 或落在 `S:`）
-    - 类别与规则映射冲突
+    - 无法确认有效类别（如 `unknown`）
 - 回退结果约束：
   - 始终返回 `D:` 盘保守路径（`ParsedInstallRules.default_d_drive_path()`）
   - `fallback_used = true`
@@ -180,7 +193,7 @@
 - 编排职责：
   - 校验输入软件名
   - 读取并解析规则文档
-  - 生成稳定 `rule_summary` 并构建 `LLMInstallPathRequest`
+  - 生成稳定 `rule_summary`，并把 `category_profiles` 一起构建到 `LLMInstallPathRequest`
   - 调用 SiliconFlow adapter（或注入的分类器）
   - 统一通过 `build_install_suggestion_from_llm` 执行硬规则与回退守卫
   - 输出 `InstallSuggestion`
@@ -228,12 +241,12 @@
 - `tests/test_step4_logging_setup.py`：日志初始化与幂等性
 - `tests/test_step5_domain_models.py`：领域模型校验、枚举非法值、序列化反序列化
 - `tests/test_step6_rules_document_loader.py`：规则文档读取、中文读取、异常场景
-- `tests/test_step7_rule_document_parser.py`：机器规则结构解析（全局约束/类别映射）与必需段落校验
+- `tests/test_step7_rule_document_parser.py`：机器规则结构解析（全局约束/类别映射/类别语义）与必需段落校验
 - `tests/test_step8_install_path_hard_rules.py`：硬规则覆盖、S盘纠正、非D盘纠正与保留合法D盘路径
 - `tests/test_step9_llm_models.py`：LLM 请求/响应模型字段校验、别名映射、缺失字段拒绝、类别与置信度格式归一化、额外字段兼容
 - `tests/test_step10_siliconflow_adapter.py`：请求组装、配置透传、超时/空响应/非 JSON 错误包装、嵌套 JSON 解包兼容
-- `tests/test_step11_prompt_builder.py`：提示词输入完整性与顺序稳定性
-- `tests/test_step12_llm_response_service.py`：合法解析与回退场景（非法 JSON/缺失字段/低置信度/S 盘路径/LLM 失败）+ `unknown` 类别路径反推恢复
+- `tests/test_step11_prompt_builder.py`：提示词输入完整性、类别语义透传与顺序稳定性
+- `tests/test_step12_llm_response_service.py`：合法解析与回退场景（非法 JSON/缺失字段/低置信度/LLM 失败）+ “忽略 LLM 路径、只按本地类别映射给路径”
 - `tests/test_step13_install_path_suggestion_use_case.py`：应用层主编排（五大类别 + 不可靠分类回退 + 人工确认）
 - `tests/test_step14_suggestion_explainer.py`：说明文本稳定性、规则依据可读性、回退原因完整性
 - `tests/test_step15_cli_root.py`：CLI 根入口帮助信息与顶层异常处理

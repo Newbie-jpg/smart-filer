@@ -1,7 +1,12 @@
 from smart_filer.application.services.llm_response_service import (
     build_install_suggestion_from_llm,
 )
-from smart_filer.domain.models import LLMInstallPathResponse, ParsedInstallRules, SoftwareCategory
+from smart_filer.domain.models import (
+    CategoryRuleProfile,
+    LLMInstallPathResponse,
+    ParsedInstallRules,
+    SoftwareCategory,
+)
 from smart_filer.domain.models.rule_metadata import FallbackStatus
 from smart_filer.infrastructure.providers.siliconflow_adapter import (
     SiliconFlowAdapterResult,
@@ -21,6 +26,13 @@ def _parsed_rules_fixture() -> ParsedInstallRules:
             SoftwareCategory.MEDIA_DESIGN: r"D:\50_Media_Design",
             SoftwareCategory.SYSTEM_UTILITIES: r"D:\60_System_Utilities",
             SoftwareCategory.GAMES_ENTERTAIN: r"D:\70_Games_Entertain",
+        },
+        category_profiles={
+            SoftwareCategory.PRODUCTIVITY: CategoryRuleProfile(
+                definition="Communication and collaboration tools.",
+                includes=["Team Chat"],
+                excludes=["System Maintenance"],
+            )
         },
         warnings=[],
         rule_basis=["Software should be installed on D drive."],
@@ -96,7 +108,7 @@ def test_response_service_falls_back_on_low_confidence() -> None:
     assert suggestion.fallback_status is FallbackStatus.USED_UNCERTAIN_RESULT
 
 
-def test_response_service_falls_back_on_s_drive_path() -> None:
+def test_response_service_ignores_llm_path_and_uses_local_mapping() -> None:
     suggestion = build_install_suggestion_from_llm(
         software_name="OBS Studio",
         parsed_rules=_parsed_rules_fixture(),
@@ -110,9 +122,9 @@ def test_response_service_falls_back_on_s_drive_path() -> None:
         ),
     )
 
-    assert suggestion.fallback_used is True
-    assert suggestion.fallback_status is FallbackStatus.USED_VALIDATION_ERROR
-    assert suggestion.suggested_install_path.startswith("D:\\")
+    assert suggestion.fallback_used is False
+    assert suggestion.fallback_status is FallbackStatus.NOT_USED
+    assert suggestion.suggested_install_path == r"D:\50_Media_Design"
 
 
 def test_response_service_falls_back_when_llm_request_fails() -> None:
@@ -127,7 +139,29 @@ def test_response_service_falls_back_when_llm_request_fails() -> None:
     assert suggestion.suggested_install_path.startswith("D:\\")
 
 
-def test_response_service_infers_category_from_path_when_llm_returns_unknown() -> None:
+def test_response_service_uses_local_mapping_when_llm_path_conflicts() -> None:
+    suggestion = build_install_suggestion_from_llm(
+        software_name="wegame",
+        parsed_rules=_parsed_rules_fixture(),
+        llm_result=_adapter_result(
+            {
+                "category": "games_entertain",
+                "suggested_path": r"D:\60_System_Utilities",
+                "reason": "Game platform software.",
+                "confidence": 0.91,
+            }
+        ),
+    )
+
+    assert suggestion.fallback_used is False
+    assert suggestion.fallback_status is FallbackStatus.NOT_USED
+    assert suggestion.software_category is SoftwareCategory.GAMES_ENTERTAIN
+    assert suggestion.suggested_install_path == r"D:\70_Games_Entertain"
+    assert suggestion.rule_basis[0].source.value == "llm"
+    assert "install path selected from local category mapping" in suggestion.rule_basis[0].summary
+
+
+def test_response_service_falls_back_when_llm_returns_unknown_category() -> None:
     suggestion = build_install_suggestion_from_llm(
         software_name="chatbox",
         parsed_rules=_parsed_rules_fixture(),
@@ -141,7 +175,7 @@ def test_response_service_infers_category_from_path_when_llm_returns_unknown() -
         ),
     )
 
-    assert suggestion.fallback_used is False
-    assert suggestion.fallback_status is FallbackStatus.NOT_USED
-    assert suggestion.software_category is SoftwareCategory.PRODUCTIVITY
-    assert suggestion.suggested_install_path == r"D:\40_Productivity"
+    assert suggestion.fallback_used is True
+    assert suggestion.fallback_status is FallbackStatus.USED_UNCERTAIN_RESULT
+    assert suggestion.software_category is SoftwareCategory.UNKNOWN
+    assert suggestion.suggested_install_path.startswith("D:\\")
