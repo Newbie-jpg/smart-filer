@@ -3,6 +3,8 @@
 from smart_filer.domain.models import (
     FallbackStatus,
     InstallSuggestion,
+    LLMInstallPathRequest,
+    LLMInstallPathResponse,
     ParsedInstallRules,
     RuleBasis,
     RulePriority,
@@ -13,6 +15,8 @@ from smart_filer.domain.models import (
 __all__ = [
     "FallbackStatus",
     "InstallSuggestion",
+    "LLMInstallPathRequest",
+    "LLMInstallPathResponse",
     "ParsedInstallRules",
     "RuleBasis",
     "RulePriority",

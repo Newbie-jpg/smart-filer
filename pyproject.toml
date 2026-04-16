@@ -15,6 +15,9 @@ dependencies = [
   "openai>=1.40.0",
 ]
 
+[project.scripts]
+smart-filer = "smart_filer.main:main"
+
 [dependency-groups]
 dev = [
   "pytest>=8.0.0",
@@ -23,4 +26,3 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
