@@ -255,6 +255,44 @@
   - 全量：`64 passed`
 - 测试环境：Python `3.12.13`
 
+### 本次新增（步骤17-18）
+
+17. **步骤17：补齐集成测试**
+- 新增端到端集成测试文件：
+  - `tests/test_step17_integration_cli_pipeline.py`
+- 覆盖场景：
+  - 正常分类并返回路径
+  - LLM 返回非法结构（通过 `SiliconFlowResponseError` 替身触发）后进入回退
+  - 规则文档缺失时 CLI 友好报错并返回非零退出码
+  - 规则文档修改后，再次调用命令时重新加载并生效
+- 测试设计口径：
+  - 使用真实 CLI -> 应用层 -> 规则加载/解析 -> 回退逻辑链路
+  - 仅在 SiliconFlow 调用点使用替身（符合实施计划要求）
+
+18. **步骤18：整理开发文档与验收清单**
+- 重写并扩展 `README.md`，补齐以下内容：
+  - 当前版本边界（仅支持软件安装位置建议）
+  - CLI 输入输出格式与示例
+  - 规则来源与优先级
+  - 依赖安装路径规则
+  - SiliconFlow 配置项与模型来源
+  - LLM 回退策略
+  - 明确未实现能力清单
+  - 本版验收清单（Step 18 Checklist）
+- 按文档说明完成一次命令验证：
+  - `uv run smart-filer suggest-install-path "OBS Studio"`
+  - 成功返回结构化 JSON 结果（回退场景）
+
+### 最新测试结果（步骤1-18）
+
+- 执行命令：
+  - `uv run pytest -s tests/test_step17_integration_cli_pipeline.py`
+  - `uv run pytest -s tests`
+- 结果：
+  - 步骤17专项：`4 passed`
+  - 全量：`68 passed`
+- 测试环境：Python `3.12.13`
+
 ### 下一步建议
 
-- 进入步骤17：补齐 CLI 到应用层的集成测试（含规则文档缺失与规则重载生效场景）
+- 规划后续里程碑（文件路由、索引持久化与软件存在性检查）前，先冻结并评审当前规则解析覆盖边界。

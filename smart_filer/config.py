@@ -68,7 +68,7 @@ def load_settings(overrides: Optional[Mapping[str, str]] = None) -> AppSettings:
     siliconflow_model_id = _get_prefixed_env(env, "SILICONFLOW_MODEL_ID")
     log_dir = Path(_get_prefixed_env(env, "LOG_DIR", "logs") or "logs")
 
-    llm_enabled_raw = _get_prefixed_env(env, "LLM_ENABLED", "false") or "false"
+    llm_enabled_raw = _get_prefixed_env(env, "LLM_ENABLED", "true") or "true"
     llm_enabled = _parse_bool(llm_enabled_raw, "SMART_FILER_LLM_ENABLED")
 
     timeout_raw = (
@@ -133,4 +133,3 @@ def get_settings() -> AppSettings:
 
 def clear_settings_cache() -> None:
     get_settings.cache_clear()
-

@@ -6,12 +6,17 @@ from smart_filer.config import SettingsError, load_settings
 
 
 def test_config_defaults_load_successfully() -> None:
-    settings = load_settings(overrides={})
+    settings = load_settings(
+        overrides={
+            "SMART_FILER_SILICONFLOW_API_KEY": "test-api-key",
+            "SMART_FILER_SILICONFLOW_MODEL_ID": "sf-model-1",
+        }
+    )
 
     assert settings.rules_document_path == Path("文件结构.md")
     assert settings.siliconflow_base_url == "https://api.siliconflow.cn/v1"
     assert settings.log_dir == Path("logs")
-    assert settings.llm_enabled is False
+    assert settings.llm_enabled is True
     assert settings.request_timeout_seconds == 30.0
     assert settings.fallback_requires_confirmation is True
 
@@ -50,4 +55,3 @@ def test_config_raises_clear_error_for_missing_required_llm_fields() -> None:
         load_settings(overrides=env)
 
     assert "SMART_FILER_SILICONFLOW_API_KEY" in str(error.value)
-

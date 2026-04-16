@@ -2,8 +2,8 @@
 
 ## 1. 当前架构状态（截至 2026-04-16）
 
-- 本仓库已完成实施计划步骤 1-16。
-- 当前处于“CLI 入口已接入，等待步骤17集成测试”阶段：
+- 本仓库已完成实施计划步骤 1-18。
+- 当前处于“首版安装路径建议链路已完成并通过集成测试”阶段：
   - 已完成目录分层、依赖声明、配置加载、日志初始化。
   - 已完成领域模型定义（软件类别、规则元数据、安装建议结果）。
   - 已完成 LLM 请求/响应结构化模型定义（含字段约束与别名映射）。
@@ -17,7 +17,8 @@
   - 已完成结果说明与规则依据整理服务（稳定可读说明、规则依据排序、回退状态说明）。
   - 已完成 CLI 根入口（Typer app、顶层异常处理、统一输出通道）。
   - 已完成 `suggest-install-path` 命令（调用用例并输出结构化 JSON）。
-- 当前未完成：步骤17集成测试、步骤18文档验收清单。
+  - 已完成步骤17集成测试（CLI -> 应用层 -> 规则系统 -> 回退逻辑主路径）。
+  - 已完成步骤18文档验收清单（README 边界/配置/回退策略/未实现能力同步）。
 
 ## 2. 分层与依赖方向
 
@@ -201,8 +202,9 @@
 - `tests/test_step14_suggestion_explainer.py`：说明文本稳定性、规则依据可读性、回退原因完整性
 - `tests/test_step15_cli_root.py`：CLI 根入口帮助信息与顶层异常处理
 - `tests/test_step16_cli_suggest_install_path_command.py`：建议命令正常输入、空输入、无法分类与 LLM 回退场景
+- `tests/test_step17_integration_cli_pipeline.py`：CLI 到规则系统与回退逻辑的集成链路（含规则文档缺失与重载生效）
 
-最新验证结果：步骤1-16测试总计 `64 passed`。
+最新验证结果：步骤1-18测试总计 `68 passed`。
 
 ## 10. 文件职责（当前实现）
 
@@ -237,6 +239,8 @@
 - `tests/test_step14_suggestion_explainer.py`：步骤14测试
 - `tests/test_step15_cli_root.py`：步骤15测试
 - `tests/test_step16_cli_suggest_install_path_command.py`：步骤16测试
+- `tests/test_step17_integration_cli_pipeline.py`：步骤17测试
+- `README.md`：步骤18文档与验收清单
 
 ## 11. 完整数据库 Schema（全量草案，尚未实现）
 
