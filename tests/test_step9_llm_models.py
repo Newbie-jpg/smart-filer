@@ -53,3 +53,34 @@ def test_llm_response_model_rejects_missing_required_fields() -> None:
                 "confidence": 0.74,
             }
         )
+
+
+def test_llm_response_model_normalizes_common_category_and_confidence_formats() -> None:
+    payload = {
+        "category": "Development Tools",
+        "suggested_path": r"D:\10_Environments",
+        "reason": "Development tools should stay under environments path.",
+        "confidence": "84%",
+    }
+
+    response = LLMInstallPathResponse.model_validate(payload)
+
+    assert response.software_category.value == "development_environment"
+    assert response.confidence == pytest.approx(0.84)
+
+
+def test_llm_response_model_ignores_extra_keys() -> None:
+    payload = {
+        "category": "media_design",
+        "suggested_path": r"D:\50_Media_Design",
+        "reason": "Media tool.",
+        "confidence": 0.8,
+        "needs_confirmation": True,
+        "software_recommendation": None,
+    }
+
+    response = LLMInstallPathResponse.model_validate(payload)
+    dumped = response.model_dump(mode="json", by_alias=True)
+
+    assert dumped["category"] == "media_design"
+    assert "needs_confirmation" not in dumped

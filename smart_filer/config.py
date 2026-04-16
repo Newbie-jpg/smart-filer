@@ -1,4 +1,4 @@
-"""Global configuration entry point for smart-filer."""
+﻿"""Global configuration entry point for smart-filer."""
 
 from dataclasses import dataclass
 from functools import lru_cache
@@ -57,8 +57,10 @@ def _effective_env(overrides: Optional[Mapping[str, str]]) -> MutableMapping[str
 def load_settings(overrides: Optional[Mapping[str, str]] = None) -> AppSettings:
     env = _effective_env(overrides)
 
+    default_rules_document = "文档结构.rule.md"
     rules_document_path = Path(
-        _get_prefixed_env(env, "RULES_DOCUMENT_PATH", "文件结构.md") or "文件结构.md"
+        _get_prefixed_env(env, "RULES_DOCUMENT_PATH", default_rules_document)
+        or default_rules_document
     )
     siliconflow_api_key = _get_prefixed_env(env, "SILICONFLOW_API_KEY")
     siliconflow_base_url = (
@@ -133,3 +135,4 @@ def get_settings() -> AppSettings:
 
 def clear_settings_cache() -> None:
     get_settings.cache_clear()
+

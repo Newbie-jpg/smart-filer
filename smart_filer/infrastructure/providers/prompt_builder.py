@@ -15,6 +15,10 @@ class InstallPathPromptBuilder:
             "You are a software installation routing assistant for Windows.\n"
             "Always return a strict JSON object only.\n"
             "Required fields: category, suggested_path, reason, confidence.\n"
+            "Allowed category values only: "
+            "development_environment, engineering, productivity, "
+            "media_design, system_utilities, games_entertain, unknown.\n"
+            "confidence must be a number between 0 and 1.\n"
             "Do not add markdown, comments, or any extra keys."
         )
         user_prompt = (

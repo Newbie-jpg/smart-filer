@@ -19,10 +19,10 @@ def _new_runtime_file(suffix: str) -> Path:
 
 
 def test_loader_reads_repository_rules_document() -> None:
-    content = load_rules_document(REPO_ROOT / "文件结构.md")
+    content = load_rules_document(REPO_ROOT / "文档结构.rule.md")
 
     assert len(content) > 20
-    assert "S:" in content
+    assert "global_rules:" in content
 
 
 def test_loader_reads_utf8_chinese_content_correctly() -> None:

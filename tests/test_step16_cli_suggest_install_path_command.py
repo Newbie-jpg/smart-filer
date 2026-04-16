@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 
 import pytest
@@ -18,7 +18,7 @@ from smart_filer.domain.models.rule_metadata import (
 
 def _settings_fixture() -> AppSettings:
     return AppSettings(
-        rules_document_path=Path("文件结构.md"),
+        rules_document_path=Path("文档结构.rule.md"),
         siliconflow_api_key="test-key",
         siliconflow_base_url="https://api.siliconflow.cn/v1",
         siliconflow_model_id="test-model",
@@ -186,3 +186,4 @@ def test_command_handles_llm_error_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     payload = json.loads(result.stdout)
     assert payload["suggestion"]["fallback_status"] == "used_llm_error"
     assert "LLM request failed" in payload["suggestion"]["reason"]
+

@@ -32,9 +32,47 @@ class LLMInstallPathRequest(BaseModel):
 class LLMInstallPathResponse(BaseModel):
     """Structured LLM response used by downstream rule validation."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     software_category: SoftwareCategory = Field(alias="category")
     suggested_install_path: str = Field(alias="suggested_path", min_length=1)
     reason: str = Field(min_length=1)
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+
+    @field_validator("software_category", mode="before")
+    @classmethod
+    def _normalize_software_category(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+
+        normalized = value.strip().lower()
+        if not normalized:
+            return SoftwareCategory.UNKNOWN.value
+
+        canonical = normalized.replace("-", "_").replace(" ", "_")
+        aliases = {
+            "development_tools": SoftwareCategory.DEVELOPMENT_ENVIRONMENT.value,
+            "dev_environment": SoftwareCategory.DEVELOPMENT_ENVIRONMENT.value,
+            "development_environment_sdk": SoftwareCategory.DEVELOPMENT_ENVIRONMENT.value,
+            "media": SoftwareCategory.MEDIA_DESIGN.value,
+            "media_design_tools": SoftwareCategory.MEDIA_DESIGN.value,
+            "system_utility": SoftwareCategory.SYSTEM_UTILITIES.value,
+            "utilities": SoftwareCategory.SYSTEM_UTILITIES.value,
+            "game_entertainment": SoftwareCategory.GAMES_ENTERTAIN.value,
+            "games": SoftwareCategory.GAMES_ENTERTAIN.value,
+        }
+        allowed_values = {item.value for item in SoftwareCategory}
+        if canonical in allowed_values:
+            return canonical
+        return aliases.get(canonical, SoftwareCategory.UNKNOWN.value)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _normalize_confidence(cls, value: object) -> object:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned.endswith("%"):
+                number = float(cleaned[:-1].strip())
+                return number / 100.0
+            return float(cleaned)
+        return value

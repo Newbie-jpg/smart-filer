@@ -296,3 +296,166 @@
 ### 下一步建议
 
 - 规划后续里程碑（文件路由、索引持久化与软件存在性检查）前，先冻结并评审当前规则解析覆盖边界。
+
+## 2026-04-16（补充调试记录）
+
+### 问题复现
+
+- 用户在 CLI 下执行：
+  - `uv run smart-filer suggest-install-path "OBS Studio"`
+  - `uv run smart-filer suggest-install-path "chatbox"`
+- 观测到两类失败表现：
+  - `LLM request failed: SiliconFlow returned JSON but failed schema validation.`
+  - `LLM returned unknown software category.`，触发 `used_uncertain_result` 回退
+
+### 本次修复
+
+1. **LLM 响应模型鲁棒性增强**
+- 文件：`smart_filer/domain/models/llm_models.py`
+- 调整：
+  - `LLMInstallPathResponse` 从 `extra="forbid"` 调整为 `extra="ignore"`
+  - 增加 `category` 归一化（兼容常见别名写法）
+  - 增加 `confidence` 归一化（兼容字符串与百分比）
+
+2. **提示词约束增强**
+- 文件：`smart_filer/infrastructure/providers/prompt_builder.py`
+- 调整：
+  - 明确允许的 `category` 枚举值
+  - 明确 `confidence` 必须为 `0~1` 数值
+
+3. **Provider 解析兼容增强**
+- 文件：`smart_filer/infrastructure/providers/siliconflow_adapter.py`
+- 调整：
+  - 支持解包 `data/result/response` 嵌套 JSON
+  - schema 校验失败错误信息补充字段级定位
+
+4. **unknown 类别恢复策略**
+- 文件：`smart_filer/application/services/llm_response_service.py`
+- 调整：
+  - `category=unknown` 时先尝试根据 `suggested_path` 反推类别
+  - 若反推成功则继续正常建议流程；仅在无法反推时回退
+
+### 新增/更新测试
+
+- `tests/test_step9_llm_models.py`
+  - 新增类别与置信度归一化测试
+  - 新增额外字段兼容测试
+- `tests/test_step10_siliconflow_adapter.py`
+  - 新增嵌套 JSON + 额外字段兼容测试
+- `tests/test_step12_llm_response_service.py`
+  - 新增 `unknown + 映射路径` 自动恢复测试
+
+### 验证结果
+
+- 执行命令：
+  - `uv run pytest -s tests/test_step9_llm_models.py tests/test_step10_siliconflow_adapter.py tests/test_step12_llm_response_service.py tests/test_step17_integration_cli_pipeline.py`
+  - `uv run pytest -s tests/test_step12_llm_response_service.py tests/test_step13_install_path_suggestion_use_case.py tests/test_step16_cli_suggest_install_path_command.py tests/test_step17_integration_cli_pipeline.py`
+- 结果：
+  - 第一组：`22 passed`
+  - 第二组：`21 passed`
+
+## 2026-04-16（规则文档设计补充）
+
+### 本次文档设计工作
+
+- 新增正式设计文档：`memory-bank/machine-rules-document-design.md`
+- 设计目标：
+  - 为下一版规则系统定义“机器优先”的结构化规则文档
+  - 明确类别、默认路径、特例覆盖、冲突解决顺序与校验指标
+  - 取消云同步相关建模，不再把同步路径作为规则字段
+
+### 本次同步更新
+
+- 更新 `文件结构.md`
+  - 删除 `OneDrive` 目录与云同步口径
+  - 删除“OneDrive 与 Obsidian 规则”段落
+  - 改写为“本地笔记规则”，明确笔记与知识整理按本地目录管理
+- 更新 `memory-bank/architecture.md`
+  - 记录新的机器优先规则文档设计方向
+  - 标注该设计尚未落地到当前解析器
+
+### 当前结论
+
+- 当前实现仍读取自然语言版 `文件结构.md`
+- 下一步如推进规则系统升级，应优先按 `memory-bank/machine-rules-document-design.md` 产出新的规则文档，再改造解析器
+
+## 2026-04-16（第二次迭代：机器规则文档落地）
+
+### 本次目标
+
+- 将规则输入从自然语言文档 `文件结构.md` 切换为机器规则文档 `文档结构.rule.md`
+- 按 `memory-bank/machine-rules-document-design.md` 设计约束，重写规则解析器
+- 保持现有 CLI / 应用层用例接口不变，完成无回归迁移
+
+### 本次代码改造
+
+1. **配置默认规则文档切换**
+- 文件：`smart_filer/config.py`
+- 调整：
+  - 默认 `SMART_FILER_RULES_DOCUMENT_PATH` 从 `文件结构.md` 切换为 `文档结构.rule.md`
+
+2. **规则中间模型增强**
+- 文件：`smart_filer/domain/models/parsed_rules.py`
+- 调整：
+  - 新增 `fallback_install_path`
+  - `default_d_drive_path()` 优先使用规则文档声明的回退路径
+
+3. **规则解析器重写（核心）**
+- 文件：`smart_filer/infrastructure/rules/document_parser.py`
+- 调整：
+  - 新增 `RuleDocumentParseError`
+  - 从“自然语言关键词猜测”改为“结构化机器规则解析”
+  - 支持读取 Markdown 中 ```yaml``` 规则块或纯 YAML 文本
+  - 强校验以下顶层结构：
+    - `metadata`
+    - `global_rules`
+    - `categories`
+    - `software_overrides`
+    - `conflict_resolution`
+    - `validation_examples`
+  - 强校验关键约束：
+    - `metadata.document_type = smart_filer_machine_rules`
+    - `preferred_install_drive = D:`
+    - `forbidden_install_roots` 至少包含 `S:\`
+    - `fallback_install_path` 必须为 `D:\` 绝对路径
+    - `categories` 必须使用受控类别枚举，且默认路径在允许路径集合中
+    - `conflict_resolution.order` 必须匹配设计规定顺序
+    - `validation_examples` 至少 10 条且字段完整
+  - 输出兼容现有 `ParsedInstallRules` 消费链路
+
+4. **规则模块导出更新**
+- 文件：`smart_filer/infrastructure/rules/__init__.py`
+- 调整：
+  - 导出 `RuleDocumentParseError`
+
+### 测试改造
+
+- 更新默认规则文档路径引用到 `文档结构.rule.md`：
+  - `tests/test_step3_config.py`
+  - `tests/test_step4_logging_setup.py`
+  - `tests/test_step10_siliconflow_adapter.py`
+  - `tests/test_step13_install_path_suggestion_use_case.py`
+  - `tests/test_step16_cli_suggest_install_path_command.py`
+- 重写解析器测试 `tests/test_step7_rule_document_parser.py`：
+  - 验证机器规则全局约束提取
+  - 验证类别路径映射提取
+  - 验证缺失顶层结构时报清晰错误
+- 更新集成测试 `tests/test_step17_integration_cli_pipeline.py`：
+  - 测试内临时规则文档从自然语言改为机器规则 YAML 结构
+  - 继续覆盖规则热重载与回退链路
+
+### 验证结果
+
+- 执行命令：
+  - `uv run pytest -s tests/test_step3_config.py tests/test_step6_rules_document_loader.py tests/test_step7_rule_document_parser.py tests/test_step17_integration_cli_pipeline.py`
+  - `uv run pytest -s tests`
+- 结果：
+  - 专项：`15 passed`
+  - 全量：`72 passed`
+- 测试环境：Python `3.12.13`
+
+### 当前结论（迭代后）
+
+- 规则系统已完成到 `文档结构.rule.md` 的解析迁移
+- 当前实现不再依赖 `文件结构.md` 的自然语言规则提取
+- 第二次迭代目标已完成，可继续推进后续里程碑

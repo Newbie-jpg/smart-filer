@@ -108,7 +108,7 @@ def test_adapter_uses_base_url_from_settings(monkeypatch: pytest.MonkeyPatch) ->
     )
 
     settings = AppSettings(
-        rules_document_path=Path("文件结构.md"),
+        rules_document_path=Path("文档结构.rule.md"),
         siliconflow_api_key="sf-key",
         siliconflow_base_url="https://api.siliconflow.cn/v1",
         siliconflow_model_id="sf-model-id",
@@ -177,3 +177,35 @@ def test_adapter_raises_clear_error_on_non_json_response() -> None:
         adapter.classify_software(_request_fixture())
 
     assert "non-JSON" in str(error.value)
+
+
+def test_adapter_accepts_wrapped_json_payload_and_extra_fields() -> None:
+    completions = _RecordingCompletions(
+        response=_completion_with_content(
+            json.dumps(
+                {
+                    "data": {
+                        "category": "development tools",
+                        "suggested_path": r"D:\10_Environments",
+                        "reason": "OBS plugins and tooling may need environment support.",
+                        "confidence": "0.86",
+                        "software_recommendation": None,
+                    }
+                }
+            )
+        )
+    )
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    adapter = SiliconFlowAdapter(
+        api_key="test-key",
+        base_url="https://api.siliconflow.cn/v1",
+        model_id="sf-model-id",
+        timeout_seconds=5.0,
+        client=client,
+    )
+
+    result = adapter.classify_software(_request_fixture())
+
+    assert result.response.software_category.value == "development_environment"
+    assert result.response.confidence == pytest.approx(0.86)
+

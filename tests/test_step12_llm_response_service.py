@@ -125,3 +125,23 @@ def test_response_service_falls_back_when_llm_request_fails() -> None:
     assert suggestion.fallback_used is True
     assert suggestion.fallback_status is FallbackStatus.USED_LLM_ERROR
     assert suggestion.suggested_install_path.startswith("D:\\")
+
+
+def test_response_service_infers_category_from_path_when_llm_returns_unknown() -> None:
+    suggestion = build_install_suggestion_from_llm(
+        software_name="chatbox",
+        parsed_rules=_parsed_rules_fixture(),
+        llm_result=_adapter_result(
+            {
+                "category": "unknown",
+                "suggested_path": r"D:\40_Productivity",
+                "reason": "Desktop chat assistant often belongs to productivity tools.",
+                "confidence": 0.86,
+            }
+        ),
+    )
+
+    assert suggestion.fallback_used is False
+    assert suggestion.fallback_status is FallbackStatus.NOT_USED
+    assert suggestion.software_category is SoftwareCategory.PRODUCTIVITY
+    assert suggestion.suggested_install_path == r"D:\40_Productivity"

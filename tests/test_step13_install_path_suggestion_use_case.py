@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 import pytest
 
@@ -15,7 +15,7 @@ from smart_filer.infrastructure.providers.siliconflow_adapter import SiliconFlow
 
 def _settings_fixture() -> AppSettings:
     return AppSettings(
-        rules_document_path=Path("文件结构.md"),
+        rules_document_path=Path("文档结构.rule.md"),
         siliconflow_api_key="test-key",
         siliconflow_base_url="https://api.siliconflow.cn/v1",
         siliconflow_model_id="test-model",
@@ -163,3 +163,4 @@ def test_use_case_falls_back_when_software_cannot_be_reliably_classified() -> No
     assert result.fallback_status is FallbackStatus.USED_UNCERTAIN_RESULT
     assert result.suggested_install_path.startswith("D:\\")
     assert result.needs_confirmation is True
+

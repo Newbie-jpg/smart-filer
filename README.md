@@ -8,7 +8,7 @@
 ## 当前已实现（Scope）
 
 - 输入一个软件名称（例如：`OBS Studio`、`Altium Designer`、`7-Zip`）。
-- 从本地规则文档 `文件结构.md` 解析安装路径相关规则。
+- 从本地规则文档 `文档结构.rule.md` 解析安装路径相关规则。
 - 可选：调用 SiliconFlow（OpenAI 兼容 API）做软件类别推断。
 - 应用硬规则：软件建议优先落在 `D:` 盘体系，且不建议安装到 `S:` 盘。
 - 输出结构化 JSON：包含建议（suggestion）+ 说明（explanation）+ 回退信息。
@@ -25,7 +25,7 @@
 
 ## 规则来源与优先级
 
-1. 本地规则文档：`文件结构.md`（解析为 `ParsedInstallRules`）。
+1. 本地规则文档：`文档结构.rule.md`（解析为 `ParsedInstallRules`）。
 2. 领域层硬规则（hard constraints）。
 3. LLM 输出仅作参考（advisory）。
 
@@ -36,7 +36,7 @@
 前提：
 - Windows + Python 3.12
 - 依赖管理使用 `uv`
-- 规则文档默认使用仓库根目录下的 `文件结构.md`
+- 规则文档默认使用仓库根目录下的 `文档结构.rule.md`
 
 ### 1) 安装依赖（推荐按文档设置 venv/cache 落点）
 
@@ -45,7 +45,7 @@
 ### 2) 直接运行命令（LLM 关闭，走保守回退建议）
 
 ```powershell
-$env:SMART_FILER_RULES_DOCUMENT_PATH = "文件结构.md"
+$env:SMART_FILER_RULES_DOCUMENT_PATH = "文档结构.rule.md"
 $env:SMART_FILER_LLM_ENABLED = "false"
 uv run smart-filer suggest-install-path "OBS Studio"
 ```
@@ -53,7 +53,7 @@ uv run smart-filer suggest-install-path "OBS Studio"
 ### 3) 启用 LLM（SiliconFlow）
 
 ```powershell
-$env:SMART_FILER_RULES_DOCUMENT_PATH = "文件结构.md"
+$env:SMART_FILER_RULES_DOCUMENT_PATH = "文档结构.rule.md"
 $env:SMART_FILER_LLM_ENABLED = "true"
 $env:SMART_FILER_SILICONFLOW_API_KEY = "<your-key>"
 $env:SMART_FILER_SILICONFLOW_MODEL_ID = "<model-id>"
@@ -104,7 +104,7 @@ smart-filer suggest-install-path "OBS Studio"
 
 环境变量统一前缀：`SMART_FILER_`。
 
-- `RULES_DOCUMENT_PATH`：规则文档路径（默认：`文件结构.md`）。
+- `RULES_DOCUMENT_PATH`：规则文档路径（默认：`文档结构.rule.md`）。
 - `LLM_ENABLED`：是否启用 LLM（`true`/`false`）。
 - `SILICONFLOW_API_KEY`：SiliconFlow API Key（仅 LLM 启用时必填）。
 - `SILICONFLOW_MODEL_ID`：模型 ID（仅 LLM 启用时必填）。

@@ -56,14 +56,143 @@ def _extract_category_mapping_path(summary_lines: list[str], category: str) -> s
 
 def _write_rules_document(path: Path, *, engineering_path: str) -> None:
     path.write_text(
-        "\n".join(
-            [
-                "software install path should stay in D: drive hierarchy",
-                "python sdk -> D:\\10_Environments",
-                f"engineering -> {engineering_path}",
-                "media_design -> D:\\50_Media_Design",
-            ]
-        ),
+        f"""
+metadata:
+  rules_version: 1
+  document_type: smart_filer_machine_rules
+  document_status: active
+  platform: windows
+  path_style: windows_absolute
+
+global_rules:
+  preferred_install_drive: "D:"
+  forbidden_install_roots:
+    - "S:\\\\"
+  fallback_install_path: "D:\\\\10_Environments"
+  allow_only_local_paths: true
+
+categories:
+  - id: development_environment
+    display_name: Development Environment
+    priority: 100
+    definition: "SDKs and runtimes."
+    includes:
+      - "Python"
+    excludes:
+      - "Steam"
+    default_install_path: "D:\\\\10_Environments"
+    allowed_install_paths:
+      - "D:\\\\10_Environments"
+  - id: engineering
+    display_name: Engineering
+    priority: 200
+    definition: "Engineering tools."
+    includes:
+      - "EDA"
+    excludes:
+      - "Office"
+    default_install_path: "{engineering_path.replace('\\', '\\\\')}"
+    allowed_install_paths:
+      - "{engineering_path.replace('\\', '\\\\')}"
+  - id: productivity
+    display_name: Productivity
+    priority: 300
+    definition: "Office tools."
+    includes:
+      - "Office"
+    excludes:
+      - "Steam"
+    default_install_path: "D:\\\\40_Productivity"
+    allowed_install_paths:
+      - "D:\\\\40_Productivity"
+  - id: media_design
+    display_name: Media Design
+    priority: 400
+    definition: "Media tools."
+    includes:
+      - "OBS"
+    excludes:
+      - "Compiler"
+    default_install_path: "D:\\\\50_Media_Design"
+    allowed_install_paths:
+      - "D:\\\\50_Media_Design"
+  - id: system_utilities
+    display_name: System Utilities
+    priority: 500
+    definition: "Utilities."
+    includes:
+      - "Everything"
+    excludes:
+      - "Steam"
+    default_install_path: "D:\\\\60_System_Utilities"
+    allowed_install_paths:
+      - "D:\\\\60_System_Utilities"
+  - id: games_entertain
+    display_name: Games and Entertainment
+    priority: 600
+    definition: "Entertainment clients."
+    includes:
+      - "Steam"
+    excludes:
+      - "Office"
+    default_install_path: "D:\\\\70_Games_Entertain"
+    allowed_install_paths:
+      - "D:\\\\70_Games_Entertain"
+
+software_overrides: []
+
+conflict_resolution:
+  order:
+    - exact_name
+    - alias
+    - override_keyword
+    - category_keyword
+    - category_default
+    - global_hard_rule
+    - fallback
+
+validation_examples:
+  - software_name: "OBS Studio"
+    expected_category: media_design
+    expected_install_path: "D:\\\\50_Media_Design"
+    expected_rule_source: category_default
+  - software_name: "Altium Designer"
+    expected_category: engineering
+    expected_install_path: "{engineering_path.replace('\\', '\\\\')}"
+    expected_rule_source: category_default
+  - software_name: "Office 365"
+    expected_category: productivity
+    expected_install_path: "D:\\\\40_Productivity"
+    expected_rule_source: category_default
+  - software_name: "Steam"
+    expected_category: games_entertain
+    expected_install_path: "D:\\\\70_Games_Entertain"
+    expected_rule_source: category_default
+  - software_name: "Everything"
+    expected_category: system_utilities
+    expected_install_path: "D:\\\\60_System_Utilities"
+    expected_rule_source: category_default
+  - software_name: "Python 3.12"
+    expected_category: development_environment
+    expected_install_path: "D:\\\\10_Environments"
+    expected_rule_source: category_default
+  - software_name: "Notion"
+    expected_category: productivity
+    expected_install_path: "D:\\\\40_Productivity"
+    expected_rule_source: category_default
+  - software_name: "Photoshop 2024"
+    expected_category: media_design
+    expected_install_path: "D:\\\\50_Media_Design"
+    expected_rule_source: category_default
+  - software_name: "AutoCAD"
+    expected_category: engineering
+    expected_install_path: "{engineering_path.replace('\\', '\\\\')}"
+    expected_rule_source: category_default
+  - software_name: "7-Zip"
+    expected_category: system_utilities
+    expected_install_path: "D:\\\\60_System_Utilities"
+    expected_rule_source: category_default
+""".strip(),
         encoding="utf-8",
     )
 
@@ -108,7 +237,7 @@ def test_cli_integration_returns_expected_path_for_valid_classification(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    rules_path = tmp_path / "rules.md"
+    rules_path = tmp_path / "rules.rule.md"
     _write_rules_document(rules_path, engineering_path=r"D:\30_Engineering")
     _configure_settings_env(monkeypatch, rules_document_path=rules_path)
     _patch_classifier(monkeypatch, classifier=_RuleAwareClassifier())
@@ -127,7 +256,7 @@ def test_cli_integration_falls_back_when_llm_returns_invalid_structure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    rules_path = tmp_path / "rules.md"
+    rules_path = tmp_path / "rules.rule.md"
     _write_rules_document(rules_path, engineering_path=r"D:\30_Engineering")
     _configure_settings_env(monkeypatch, rules_document_path=rules_path)
     _patch_classifier(
@@ -148,7 +277,7 @@ def test_cli_integration_returns_error_when_rules_document_is_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    missing_rules_path = tmp_path / "missing-rules.md"
+    missing_rules_path = tmp_path / "missing-rules.rule.md"
     _configure_settings_env(monkeypatch, rules_document_path=missing_rules_path)
     _patch_classifier(monkeypatch, classifier=_RuleAwareClassifier())
 
@@ -162,7 +291,7 @@ def test_cli_integration_reloads_modified_rules_document_between_calls(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    rules_path = tmp_path / "rules.md"
+    rules_path = tmp_path / "rules.rule.md"
     _configure_settings_env(monkeypatch, rules_document_path=rules_path)
     _patch_classifier(monkeypatch, classifier=_RuleAwareClassifier())
 

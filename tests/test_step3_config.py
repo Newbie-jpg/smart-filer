@@ -13,7 +13,7 @@ def test_config_defaults_load_successfully() -> None:
         }
     )
 
-    assert settings.rules_document_path == Path("文件结构.md")
+    assert settings.rules_document_path == Path("文档结构.rule.md")
     assert settings.siliconflow_base_url == "https://api.siliconflow.cn/v1"
     assert settings.log_dir == Path("logs")
     assert settings.llm_enabled is True

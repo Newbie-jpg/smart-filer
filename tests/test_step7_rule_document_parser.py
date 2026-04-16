@@ -1,24 +1,30 @@
-from pathlib import Path
+﻿from pathlib import Path
+
+import pytest
 
 from smart_filer.domain.models.software_category import SoftwareCategory
 from smart_filer.infrastructure.rules.document_loader import load_rules_document
-from smart_filer.infrastructure.rules.document_parser import parse_install_rules
+from smart_filer.infrastructure.rules.document_parser import (
+    RuleDocumentParseError,
+    parse_install_rules,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_parser_extracts_d_drive_and_s_drive_constraints_from_rules_doc() -> None:
-    text = load_rules_document(REPO_ROOT / "文件结构.md")
+def test_parser_extracts_global_constraints_from_machine_rules_doc() -> None:
+    text = load_rules_document(REPO_ROOT / "文档结构.rule.md")
 
     rules = parse_install_rules(text)
 
     assert rules.d_drive_preferred is True
     assert rules.discourage_s_drive_install is True
+    assert rules.fallback_install_path == r"D:\60_System_Utilities"
 
 
-def test_parser_extracts_category_to_install_path_mappings() -> None:
-    text = load_rules_document(REPO_ROOT / "文件结构.md")
+def test_parser_extracts_category_to_install_path_mappings_from_machine_rules_doc() -> None:
+    text = load_rules_document(REPO_ROOT / "文档结构.rule.md")
 
     rules = parse_install_rules(text)
 
@@ -48,13 +54,17 @@ def test_parser_extracts_category_to_install_path_mappings() -> None:
     )
 
 
-def test_parser_keeps_warning_for_unknown_mapping_format() -> None:
+def test_parser_raises_clear_error_when_required_section_missing() -> None:
     text = """
-    总原则：数据归 `S:`，执行归 `D:`。
-    怪异映射：神秘类别 -> D:\\99_Misc
-    """
+metadata:
+  rules_version: 1
+  document_type: smart_filer_machine_rules
+  document_status: active
+  platform: windows
+  path_style: windows_absolute
+"""
 
-    rules = parse_install_rules(text)
+    with pytest.raises(RuleDocumentParseError) as error:
+        parse_install_rules(text)
 
-    assert rules.warnings
-    assert any("Unrecognized mapping line" in warning for warning in rules.warnings)
+    assert "Missing required top-level section" in str(error.value)

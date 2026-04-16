@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -62,7 +62,7 @@ def test_initialize_logging_uses_settings_log_dir() -> None:
     log_dir = _new_log_dir()
     logger_name = "smart_filer.tests.initialize"
     settings = AppSettings(
-        rules_document_path=Path("文件结构.md"),
+        rules_document_path=Path("文档结构.rule.md"),
         siliconflow_api_key=None,
         siliconflow_base_url="https://api.siliconflow.cn/v1",
         siliconflow_model_id=None,
@@ -82,3 +82,4 @@ def test_initialize_logging_uses_settings_log_dir() -> None:
 
     assert logger.name == logger_name
     assert (log_dir / DEFAULT_LOG_FILE).exists()
+

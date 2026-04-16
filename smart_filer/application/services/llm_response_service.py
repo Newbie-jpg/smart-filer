@@ -57,13 +57,23 @@ def build_install_suggestion_from_llm(
     assert llm_result is not None
     response = llm_result.response
 
-    if response.software_category is SoftwareCategory.UNKNOWN:
-        return _build_fallback_suggestion(
-            software_name=software_name,
+    resolved_category = response.software_category
+    used_path_inference = False
+
+    if resolved_category is SoftwareCategory.UNKNOWN:
+        inferred_category = _infer_category_from_path(
+            suggested_install_path=response.suggested_install_path,
             parsed_rules=parsed_rules,
-            fallback_status=FallbackStatus.USED_UNCERTAIN_RESULT,
-            reason="LLM returned unknown software category.",
         )
+        if inferred_category is SoftwareCategory.UNKNOWN:
+            return _build_fallback_suggestion(
+                software_name=software_name,
+                parsed_rules=parsed_rules,
+                fallback_status=FallbackStatus.USED_UNCERTAIN_RESULT,
+                reason="LLM returned unknown software category.",
+            )
+        resolved_category = inferred_category
+        used_path_inference = True
 
     if response.confidence < low_confidence_threshold:
         return _build_fallback_suggestion(
@@ -74,7 +84,7 @@ def build_install_suggestion_from_llm(
                 "LLM confidence %.2f is below threshold %.2f."
                 % (response.confidence, low_confidence_threshold)
             ),
-            category=response.software_category,
+            category=resolved_category,
         )
 
     if _is_invalid_install_path(response.suggested_install_path):
@@ -83,11 +93,11 @@ def build_install_suggestion_from_llm(
             parsed_rules=parsed_rules,
             fallback_status=FallbackStatus.USED_VALIDATION_ERROR,
             reason="LLM suggested an install path outside D-drive software hierarchy.",
-            category=response.software_category,
+            category=resolved_category,
         )
 
     if _has_category_conflict(
-        software_category=response.software_category,
+        software_category=resolved_category,
         suggested_install_path=response.suggested_install_path,
         parsed_rules=parsed_rules,
     ):
@@ -96,26 +106,31 @@ def build_install_suggestion_from_llm(
             parsed_rules=parsed_rules,
             fallback_status=FallbackStatus.USED_VALIDATION_ERROR,
             reason="LLM category conflicts with document-defined category mapping.",
-            category=response.software_category,
+            category=resolved_category,
         )
 
     hard_rule_decision = apply_install_path_hard_rules(
-        software_category=response.software_category,
+        software_category=resolved_category,
         llm_suggested_path=response.suggested_install_path,
         parsed_rules=parsed_rules,
+    )
+    llm_rule_summary = (
+        "LLM returned unknown category; category inferred from mapped suggested path."
+        if used_path_inference
+        else "LLM returned valid structured category and path suggestion."
     )
     rule_basis = [
         RuleBasis(
             source=RuleSource.LLM,
             priority=RulePriority.LLM_HINT,
-            summary="LLM returned valid structured category and path suggestion.",
+            summary=llm_rule_summary,
         ),
         *hard_rule_decision.rule_basis,
     ]
 
     return InstallSuggestion(
         software_name=software_name,
-        software_category=response.software_category,
+        software_category=resolved_category,
         suggested_install_path=hard_rule_decision.final_install_path,
         reason=response.reason,
         confidence=response.confidence,
@@ -181,3 +196,15 @@ def _has_category_conflict(
     return _normalize_windows_path(mapped_path) != _normalize_windows_path(
         suggested_install_path
     )
+
+
+def _infer_category_from_path(
+    *,
+    suggested_install_path: str,
+    parsed_rules: ParsedInstallRules,
+) -> SoftwareCategory:
+    normalized_path = _normalize_windows_path(suggested_install_path)
+    for category, mapped_path in parsed_rules.category_install_paths.items():
+        if _normalize_windows_path(mapped_path) == normalized_path:
+            return category
+    return SoftwareCategory.UNKNOWN

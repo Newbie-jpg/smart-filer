@@ -145,9 +145,26 @@ def _parse_structured_response(raw_content: str) -> LLMInstallPathResponse:
             "SiliconFlow returned non-JSON structured content."
         ) from error
 
+    payload = _unwrap_structured_payload(payload)
+
     try:
         return LLMInstallPathResponse.model_validate(payload)
     except ValidationError as error:
+        first_error = error.errors()[0] if error.errors() else {}
+        location = ".".join(str(item) for item in first_error.get("loc", ()))
+        message = first_error.get("msg", "unknown validation error")
         raise SiliconFlowResponseError(
-            "SiliconFlow returned JSON but failed schema validation."
+            "SiliconFlow returned JSON but failed schema validation: "
+            f"{location}: {message}"
         ) from error
+
+
+def _unwrap_structured_payload(payload: object) -> object:
+    if not isinstance(payload, dict):
+        return payload
+
+    for key in ("data", "result", "response"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            return nested
+    return payload

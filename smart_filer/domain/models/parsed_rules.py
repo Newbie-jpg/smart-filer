@@ -12,6 +12,7 @@ class ParsedInstallRules(BaseModel):
 
     d_drive_preferred: bool
     discourage_s_drive_install: bool
+    fallback_install_path: str = Field(default=r"D:\10_Environments", min_length=1)
     category_install_paths: dict[SoftwareCategory, str] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     rule_basis: list[str] = Field(default_factory=list)
@@ -19,11 +20,9 @@ class ParsedInstallRules(BaseModel):
     def default_d_drive_path(self) -> str:
         """Return a conservative D-drive fallback path."""
 
-        development_path = self.category_install_paths.get(
-            SoftwareCategory.DEVELOPMENT_ENVIRONMENT
-        )
-        if development_path:
-            return development_path
+        fallback_path = self.fallback_install_path.strip()
+        if fallback_path:
+            return fallback_path
 
         for path in self.category_install_paths.values():
             if path.upper().startswith("D:\\"):
