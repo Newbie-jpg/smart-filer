@@ -11,6 +11,10 @@ venv/
 .pytest_cache/
 .test-runtime/
 .tmp/
+logs/
+
+# Secrets / local notes
+命令.md
 
 # OS/editor
 .DS_Store
